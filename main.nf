@@ -5,13 +5,13 @@
     fastP zum trimmen der adapter
     fastQC zur Qualitätskontrolle -> multiQC zur Darstellung
     shovill zur Assembly
-    quast für die Metrik
+    quast für die Metrics
 
 */
 
 
 params.reads = "$baseDir/*R{1,2}*.fastq.gz"
-params.outdir = "results"
+params.outMultiqc = "MultiQCresults"
 
 Channel
     .fromFilePairs( params.reads )
@@ -27,7 +27,7 @@ process runFastp {
     tuple val(pair_id), path(reads) from read_pairs_ch
 
     output:
-    tuple val(pair_id), path('*.fastq.gz') into trimmed_reads_ch
+    tuple val(pair_id), path('*.fastq.gz') into trimmed_reads_ch, trimmed_reads_ch2
 
     script:
     """
@@ -36,6 +36,7 @@ process runFastp {
 
 }
 
+// creating fastQC reports
 process fastqc {
     tag "FASTQC on $sample_id"
 
@@ -53,9 +54,10 @@ process fastqc {
     """  
 }  
 
+// collecting the fastQC reports into one multiQC report
 process multiqc {
 
-    publishDir params.outdir, mode:'copy'
+    publishDir params.outMultiqc, mode:'copy'
        
     input:
     path '*' from fastqc_ch.collect()
@@ -68,3 +70,20 @@ process multiqc {
     multiqc . 
     """
 } 
+
+// assembling the trimmed reads
+process runShovill {
+     
+    input:
+    tuple val(pair_id), path(trimmed_reads) from trimmed_reads_ch2
+
+    output:
+    tuple val(pair_id), path('*') into assembled_reads_ch
+
+    script:
+    """
+    mkdir assembled
+    shovill --outdir $baseDir/assembled --namefmt ${trimmed_reads} --R1 ${trimmed_reads[0]} --R2 ${trimmed_reads[1]}
+    """
+
+}

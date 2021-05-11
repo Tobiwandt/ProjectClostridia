@@ -12,6 +12,8 @@
 
 params.reads = "$baseDir/*R{1,2}*.fastq.gz"
 params.outMultiqc = "MultiQCresults"
+params.outShovill = "assembled"
+params.outQuast = "QuastOut"
 
 Channel
     .fromFilePairs( params.reads )
@@ -19,7 +21,7 @@ Channel
     .set { read_pairs_ch } 
 
 // trimming the adapters of the reads
-process runFastp {
+process fastp {
 
     publishDir "$baseDir/trimmed", mode: 'copy'
 
@@ -72,18 +74,38 @@ process multiqc {
 } 
 
 // assembling the trimmed reads
-process runShovill {
-     
+process shovill {
+
+    publishDir params.outShovill, mode:'copy'
+        
     input:
     tuple val(pair_id), path(trimmed_reads) from trimmed_reads_ch2
 
     output:
-    tuple val(pair_id), path('*') into assembled_reads_ch
+    tuple val(pair_id), path('*/contigs.fa') into assembled_reads_ch
+    
 
     script:
     """
-    mkdir assembled
-    shovill --outdir $baseDir/assembled --namefmt ${trimmed_reads} --R1 ${trimmed_reads[0]} --R2 ${trimmed_reads[1]}
+    shovill --outdir assembled_$pair_id --R1 ${trimmed_reads[0]} --R2 ${trimmed_reads[1]}
     """
 
+}
+
+// getting the metrics of the assemblies
+process quast {
+
+    publishDir params.outQuast, mode:'copy'
+
+    input:
+    tuple val(pair_id), path(assemblies) from assembled_reads_ch
+
+    output:
+    path('*') into quast_metrics_ch
+
+
+    script:
+    """
+    quast.py -o $pair_id contigs.fa
+    """
 }

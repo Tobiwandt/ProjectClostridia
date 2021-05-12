@@ -14,6 +14,7 @@ params.reads = "$baseDir/*R{1,2}*.fastq.gz"
 params.outMultiqc = "MultiQCresults"
 params.outShovill = "assembled"
 params.outQuast = "QuastOut"
+params.reference_genome = "E88.fa"
 
 Channel
     .fromFilePairs( params.reads )
@@ -56,23 +57,6 @@ process fastqc {
     """  
 }  
 
-// collecting the fastQC reports into one multiQC report
-process multiqc {
-
-    publishDir params.outMultiqc, mode:'copy'
-       
-    input:
-    path '*' from fastqc_ch.collect()
-    
-    output:
-    path 'multiqc_report.html'
-     
-    script:
-    """
-    multiqc . 
-    """
-} 
-
 // assembling the trimmed reads
 process shovill {
 
@@ -82,12 +66,14 @@ process shovill {
     tuple val(pair_id), path(trimmed_reads) from trimmed_reads_ch2
 
     output:
-    tuple val(pair_id), path('*/contigs.fa') into assembled_reads_ch
+    tuple val(pair_id), path('*/*.fa') into assembled_reads_ch
     
 
     script:
     """
     shovill --outdir assembled_$pair_id --R1 ${trimmed_reads[0]} --R2 ${trimmed_reads[1]}
+    cd assembled_$pair_id
+    mv contigs.fa ${pair_id}.fa
     """
 
 }
@@ -101,11 +87,29 @@ process quast {
     tuple val(pair_id), path(assemblies) from assembled_reads_ch
 
     output:
-    path('*') into quast_metrics_ch
+    path "*" into quast_metrics_ch
 
 
     script:
     """
-    quast.py -o $pair_id contigs.fa
+    quast.py -o $pair_id *.fa -r $baseDir/$params.reference_genome
     """
 }
+
+// collecting the fastQC reports and quast reports into one multiQC report
+process multiqc {
+
+    publishDir params.outMultiqc, mode:'copy'
+       
+    input:
+    path '*' from fastqc_ch.collect()
+    path '*' from quast_metrics_ch.collect()
+    
+    output:
+    path '*'
+     
+    script:
+    """
+    multiqc . 
+    """
+} 

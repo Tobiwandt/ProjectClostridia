@@ -7,6 +7,8 @@
     shovill zur Assembly
     quast für die Metrics
 
+    NEEDED: nextflow.config mit params.pathToConda mit path zu conda env mit BUSCO+MultiQC
+
 */
 
 
@@ -15,6 +17,7 @@ params.outMultiqc = "MultiQCresults"
 params.outShovill = "assembled"
 params.outQuast = "QuastOut"
 params.reference_genome = "E88.fa"
+params.outBUSCO = "BUSCOout"
 
 Channel
     .fromFilePairs( params.reads )
@@ -66,7 +69,7 @@ process shovill {
     tuple val(pair_id), path(trimmed_reads) from trimmed_reads_ch2
 
     output:
-    tuple val(pair_id), path('*/*.fa') into assembled_reads_ch
+    tuple val(pair_id), path('*/*.fa') into assembled_reads_ch, assembled_reads_ch2
     
 
     script:
@@ -78,7 +81,7 @@ process shovill {
 
 }
 
-// getting the metrics of the assemblies
+// getting the quast metrics of the assemblies
 process quast {
 
     publishDir params.outQuast, mode:'copy'
@@ -92,24 +95,47 @@ process quast {
 
     script:
     """
-    quast.py -o $pair_id *.fa -r $baseDir/$params.reference_genome
+    quast.py -o quast_${pair_id}_logs *.fa -r $baseDir/$params.reference_genome
+    """
+}
+
+// getting the BUSCO metrics of the assemblies
+process BUSCO {
+    conda params.pathToConda
+
+    publishDir params.outBUSCO, mode:'copy'
+
+    input:
+    tuple val(pair_id), path(assemblies) from assembled_reads_ch2
+
+    output:
+    file "**/*${pair_id}*.txt" into busco_metrics_ch
+
+
+    script:
+    """
+    busco -m genome -i *.fa -o busco_${pair_id}_logs -l clostridiales_odb10
     """
 }
 
 // collecting the fastQC reports and quast reports into one multiQC report
 process multiqc {
+    conda params.pathToConda
 
     publishDir params.outMultiqc, mode:'copy'
        
     input:
     path '*' from fastqc_ch.collect()
     path '*' from quast_metrics_ch.collect()
+    path '*' from busco_metrics_ch.collect()
     
     output:
-    path '*'
+    file "multiqc_report.html" into multiqc_report
+    file "multiqc_data"
+
      
     script:
     """
-    multiqc . 
+    multiqc .
     """
 } 

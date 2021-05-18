@@ -1,5 +1,5 @@
 ## Project Clostridia
 
-Pipeline used in my thesis.
-Combines FastP/FastQC/MultiQC/Shovill/Quast
+Pipeline used in my thesis for assembly and quality control of Illumina reads.
+Combines FastP/FastQC/Shovill/Quast/BUSCO/MultiQC.
 
